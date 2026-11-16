@@ -11,7 +11,9 @@ const state = {
     yilBaslangic: null,
     yilBitis: null,
     currentDecision: null,
-    debounceTimer: null
+    debounceTimer: null,
+    uyapPage: 1,
+    lastUyapTotal: 0
 };
 
 // DOM Elemanları
@@ -109,6 +111,7 @@ async function triggerLiveUyapSearch() {
         return;
     }
 
+    state.uyapPage = 1;
     resultsContainer.innerHTML = `
         <div class="bg-gradient-to-r from-red-50 via-rose-50 to-orange-50 border-2 border-rose-200 rounded-2xl p-8 text-center shadow-sm">
             <div class="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto text-red-600 mb-4 animate-bounce">
@@ -116,11 +119,11 @@ async function triggerLiveUyapSearch() {
             </div>
             <h3 class="text-base font-bold text-slate-900 mb-1">T.C. Adalet Bakanlığı UYAP Sistemine Bağlanılıyor...</h3>
             <p class="text-xs text-slate-600 max-w-md mx-auto mb-4">
-                "<strong>${escapeHtml(q)}</strong>" konusuyla ilgili gerçek emsal kararlar taranıyor, tam metinler indiriliyor ve yapay zekâ dizinine kaydediliyor.
+                "<strong>${escapeHtml(q)}</strong>" konusuyla ilgili on binlerce resmi emsal karar taranıyor, tam metinler indiriliyor ve yapay zekâ analizine hazırlanıyor.
             </p>
             <div class="inline-flex items-center gap-2 text-xs font-semibold text-rose-700 bg-white px-4 py-2 rounded-xl shadow-sm border border-rose-200">
                 <div class="w-3 h-3 rounded-full bg-rose-600 animate-ping"></div>
-                <span>Canlı Karar Verisi Alınıyor...</span>
+                <span>Canlı Resmi Karar Verisi Çekiliyor...</span>
             </div>
         </div>
     `;
@@ -129,11 +132,24 @@ async function triggerLiveUyapSearch() {
     resultsCountBadge.textContent = "UYAP Taranıyor...";
 
     try {
-        const response = await fetch(`/api/live/search?q=${encodeURIComponent(q)}&limit=5`);
+        const response = await fetch(`/api/live/search?q=${encodeURIComponent(q)}&limit=10&page=1`);
         const data = await response.json();
 
         if (data.status === "success" && data.retrieved_count > 0) {
-            showToast(`UYAP'tan ${data.retrieved_count} adet gerçek karar çekildi ve kaydedildi!`);
+            state.lastUyapTotal = data.total_in_uyap || data.retrieved_count;
+
+            // UYAP Havuz Bilgilendirme Kartını Göster
+            const poolBanner = document.getElementById("uyap-pool-banner");
+            const bannerQuery = document.getElementById("uyap-banner-query");
+            const bannerTotal = document.getElementById("uyap-banner-total");
+
+            if (poolBanner && bannerQuery && bannerTotal) {
+                bannerQuery.textContent = q;
+                bannerTotal.textContent = state.lastUyapTotal.toLocaleString('tr-TR');
+                poolBanner.classList.remove("hidden");
+            }
+
+            showToast(`UYAP'taki ${state.lastUyapTotal.toLocaleString('tr-TR')} karar arasından en güncel 10 karar indirildi!`);
             
             // İstatistik sayacını güncelle
             const statsResp = await fetch('/api/stats');
@@ -151,6 +167,47 @@ async function triggerLiveUyapSearch() {
         console.error("UYAP Canlı sorgulama hatası:", err);
         showToast("UYAP bağlantısında bir sorun oluştu.");
         await triggerSearch();
+    }
+}
+
+// UYAP'tan Daha Fazla Karar Çekme (Sonraki Sayfa)
+async function loadMoreUyapDecisions() {
+    const q = searchInput.value.trim() || state.query;
+    if (!q) return;
+
+    state.uyapPage += 1;
+    const moreBtn = document.getElementById("uyap-more-btn");
+    const originalText = moreBtn.innerHTML;
+    moreBtn.innerHTML = `
+        <div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+        <span>İndiriliyor...</span>
+    `;
+    moreBtn.disabled = true;
+
+    try {
+        const response = await fetch(`/api/live/search?q=${encodeURIComponent(q)}&limit=10&page=${state.uyapPage}`);
+        const data = await response.json();
+
+        if (data.status === "success" && data.retrieved_count > 0) {
+            showToast(`UYAP'tan +${data.retrieved_count} adet yeni emsal karar daha indirildi!`);
+            
+            // İstatistik sayacını güncelle
+            const statsResp = await fetch('/api/stats');
+            const statsData = await statsResp.json();
+            const counter = document.getElementById("db-total-count");
+            if (counter) counter.textContent = statsData.total_karar;
+
+            await triggerSearch();
+        } else {
+            showToast("Bu sayfada başka karar bulunamadı veya limite ulaşıldı.");
+        }
+    } catch (err) {
+        console.error("Daha fazla karar çekme hatası:", err);
+        showToast("Kararlar çekilirken bir hata oluştu.");
+    } finally {
+        moreBtn.innerHTML = originalText;
+        moreBtn.disabled = false;
+        lucide.createIcons();
     }
 }
 

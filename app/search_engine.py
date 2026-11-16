@@ -12,6 +12,32 @@ def tr_lower(text: str) -> str:
     })
     return text.translate(translation_table).lower()
 
+def expand_turkish_terms(query: str) -> List[str]:
+    """Türkçe arama sorgusunu yaygın yazım farkları, ekler ve hukuki terim varyantları ile zenginleştirir."""
+    legal_map = {
+        'mesru': 'meşru', 'mudafa': 'müdafaa', 'mudafaa': 'müdafaa',
+        'kidem': 'kıdem', 'ihbar': 'ihbar', 'ise': 'işe', 'iade': 'iade',
+        'tazminati': 'tazminatı', 'tahliye': 'tahliye', 'taahhut': 'taahhüt',
+        'taahhudu': 'taahhüdü', 'bosanma': 'boşanma', 'nafaka': 'nafaka',
+        'icra': 'icra', 'inkar': 'inkar', 'haciz': 'haciz', 'kusur': 'kusur',
+        'kamulastirma': 'kamulaştırma', 'imar': 'imar', 'dolandiricilik': 'dolandırıcılık',
+        'hirsizlik': 'hırsızlık', 'katilan': 'katılan', 'sanik': 'sanık'
+    }
+    raw_words = [re.sub(r'[^\w\d]', '', w) for w in query.split() if w]
+    all_terms = set(raw_words)
+    for w in raw_words:
+        w_low = tr_lower(w)
+        if not w_low:
+            continue
+        all_terms.add(w_low)
+        if w_low in legal_map:
+            all_terms.add(legal_map[w_low])
+        trans_accent = str.maketrans('cgsouı', 'çğşöüi')
+        all_terms.add(w_low.translate(trans_accent))
+        trans_ascii = str.maketrans('çğşöüıİ', 'cgsouii')
+        all_terms.add(w_low.translate(trans_ascii))
+    return [t for t in all_terms if len(t) > 1]
+
 def highlight_keywords(text: str, keywords: List[str], max_length: int = 240) -> str:
     """Metin içinde anahtar kelimelerin geçtiği yeri bulur, bağlamını keser ve vurgular."""
     if not text:
@@ -64,57 +90,59 @@ def execute_search(
     limit: int = 20,
     offset: int = 0
 ) -> Dict[str, Any]:
-    """Tam metin ve filtreli akıllı emsal karar arama motoru."""
+    """
+    Akıllı, kademeli ve tekilleştirilmiş (deduplicated) emsal karar arama motoru.
+    Mükerrer kararları göstermez, esnek anahtar kelime eşleşmesi sunar.
+    """
     conn = get_connection()
     cursor = conn.cursor()
 
     q_clean = query.strip()
-    keywords = [k for k in re.split(r'\s+', q_clean) if len(k) > 1] if q_clean else []
+    raw_keywords = [k for k in re.split(r'\s+', q_clean) if len(k) > 1] if q_clean else []
+    expanded_terms = expand_turkish_terms(q_clean) if q_clean else []
 
-    base_sql = "SELECT id, mahkeme, daire, esas_no, karar_no, karar_tarihi, hukuk_alani, karar_sonucu, ilgili_kanunlar, baslik, tam_metin, kaynak_url"
+    base_sql = """
+    SELECT id, mahkeme, daire, esas_no, karar_no, karar_tarihi, hukuk_alani, karar_sonucu, ilgili_kanunlar, baslik, tam_metin, kaynak_url
+    """
     where_clauses = []
     params = []
 
-    # 1. Tam Metin Arama (FTS5 veya LIKE fallback)
+    # 1. Akıllı Tam Metin Arama (FTS5 Kademeli Eşleşme)
     if q_clean:
-        # FTS5 match query hazırlığı
-        sanitized_terms = []
-        for word in q_clean.replace("'", " ").replace('"', ' ').split():
-            clean_word = re.sub(r'[^\w\d]', '', word)
-            if clean_word:
-                sanitized_terms.append(f"{clean_word}*")
-
-        fts_query = " ".join(sanitized_terms)
-
+        matched_ids = []
         try:
-            # FTS5 eşleşmesi dene
-            fts_check = "SELECT rowid, rank FROM decisions_fts WHERE decisions_fts MATCH ? ORDER BY rank"
-            cursor.execute(fts_check, (fts_query,))
-            fts_rows = cursor.fetchall()
-            matched_ids = [r[0] for r in fts_rows]
+            # Aşamalı arama: Önce tüm kelimelerin geçtiği AND sorgusu
+            clean_words = [re.sub(r'[^\w\d]', '', w) for w in q_clean.split() if w]
+            if len(clean_words) > 1:
+                fts_and = " ".join(f"{w}*" for w in clean_words)
+                cursor.execute("SELECT DISTINCT rowid FROM decisions_fts WHERE decisions_fts MATCH ? LIMIT 50", (fts_and,))
+                and_ids = [r[0] for r in cursor.fetchall()]
+                matched_ids.extend(and_ids)
 
-            if matched_ids:
-                placeholders = ",".join("?" for _ in matched_ids)
-                where_clauses.append(f"id IN ({placeholders})")
-                params.extend(matched_ids)
-            else:
-                # FTS ile bulunamadıysa LIKE fallback
-                like_conditions = []
-                for kw in keywords:
-                    like_conditions.append("(baslik LIKE ? OR tam_metin LIKE ? OR esas_no LIKE ? OR karar_no LIKE ? OR ilgili_kanunlar LIKE ?)")
-                    kw_wildcard = f"%{kw}%"
-                    params.extend([kw_wildcard, kw_wildcard, kw_wildcard, kw_wildcard, kw_wildcard])
-                if like_conditions:
-                    where_clauses.append(f"({' AND '.join(like_conditions)})")
-        except Exception:
-            # Herhangi bir FTS sözdizim hatasında güvenli LIKE
+            # Genişletilmiş OR sorgusu (hiçbir kararın kaçmaması için)
+            if expanded_terms:
+                fts_or = " OR ".join(f"{t}*" for t in expanded_terms[:12])
+                cursor.execute("SELECT DISTINCT rowid FROM decisions_fts WHERE decisions_fts MATCH ? LIMIT 100", (fts_or,))
+                or_ids = [r[0] for r in cursor.fetchall()]
+                for oid in or_ids:
+                    if oid not in matched_ids:
+                        matched_ids.append(oid)
+        except Exception as e:
+            print(f"[Search Engine] FTS hatası: {e}")
+
+        if matched_ids:
+            placeholders = ",".join("?" for _ in matched_ids)
+            where_clauses.append(f"id IN ({placeholders})")
+            params.extend(matched_ids)
+        else:
+            # FTS sonuç vermezse LIKE ile esnek arama (OR birleşimi)
             like_conditions = []
-            for kw in keywords:
+            for kw in (expanded_terms or raw_keywords):
                 like_conditions.append("(baslik LIKE ? OR tam_metin LIKE ? OR esas_no LIKE ? OR karar_no LIKE ? OR ilgili_kanunlar LIKE ?)")
                 kw_wildcard = f"%{kw}%"
                 params.extend([kw_wildcard, kw_wildcard, kw_wildcard, kw_wildcard, kw_wildcard])
             if like_conditions:
-                where_clauses.append(f"({' AND '.join(like_conditions)})")
+                where_clauses.append(f"({' OR '.join(like_conditions)})")
 
     # 2. Mahkeme Filtresi
     if mahkeme and mahkeme.lower() != "tümü":
@@ -146,13 +174,19 @@ def execute_search(
 
     where_sql = f" WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
-    # Toplam sayı
-    count_sql = f"SELECT COUNT(*) FROM decisions{where_sql}"
+    # Mükerrer kararları tekilleştirerek toplam sayıyı hesapla
+    count_sql = f"SELECT COUNT(DISTINCT daire || esas_no || karar_no) FROM decisions{where_sql}"
     cursor.execute(count_sql, tuple(params))
     total_count = cursor.fetchone()[0]
 
-    # Sonuçları çek
-    final_sql = f"{base_sql} FROM decisions{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?"
+    # Sonuçları tekilleştirerek çek (GROUP BY daire, esas_no, karar_no)
+    final_sql = f"""
+    {base_sql} 
+    FROM decisions{where_sql} 
+    GROUP BY daire, esas_no, karar_no 
+    ORDER BY id DESC 
+    LIMIT ? OFFSET ?
+    """
     query_params = list(params)
     query_params.extend([limit, offset])
 
@@ -160,6 +194,8 @@ def execute_search(
     rows = cursor.fetchall()
 
     results = []
+    highlight_terms = list(set(raw_keywords + expanded_terms))
+
     for r in rows:
         row_dict = dict(r)
         try:
@@ -167,19 +203,43 @@ def execute_search(
         except Exception:
             kanunlar = [row_dict["ilgili_kanunlar"]] if row_dict["ilgili_kanunlar"] else []
 
-        snippet = highlight_keywords(row_dict["tam_metin"], keywords, max_length=240)
+        snippet = highlight_keywords(row_dict["tam_metin"], highlight_terms, max_length=240)
 
-        # Basit alaka skoru hesaplama
+        # Akıllı Alaka Skoru Hesaplama
         score = 1.0
         if q_clean:
             q_low = tr_lower(q_clean)
-            if q_low in tr_lower(row_dict["esas_no"]) or q_low in tr_lower(row_dict["karar_no"]):
-                score += 50.0
-            if q_low in tr_lower(row_dict["baslik"]):
-                score += 25.0
-            for k in kanunlar:
-                if q_low in tr_lower(k):
+            baslik_low = tr_lower(row_dict["baslik"])
+            tam_metin_low = tr_lower(row_dict["tam_metin"])
+            esas_low = tr_lower(row_dict["esas_no"])
+            karar_low = tr_lower(row_dict["karar_no"])
+
+            # 1. Esas veya Karar Numarası Eşleşmesi (En yüksek öncelik)
+            if q_low in esas_low or q_low in karar_low:
+                score += 150.0
+
+            # 2. Tam İfadenin Başlıkta Geçmesi
+            if q_low in baslik_low:
+                score += 100.0
+
+            # 3. Kelime bazlı eşleşmeler
+            for kw in raw_keywords:
+                kw_low = tr_lower(kw)
+                if kw_low in baslik_low:
+                    score += 50.0
+                if kw_low in tam_metin_low:
                     score += 15.0
+                for k in kanunlar:
+                    if kw_low in tr_lower(k):
+                        score += 30.0
+
+            # 4. Genişletilmiş Türkçe varyant eşleşmeleri
+            for ext in expanded_terms:
+                ext_low = tr_lower(ext)
+                if ext_low in baslik_low:
+                    score += 25.0
+                if ext_low in tam_metin_low:
+                    score += 5.0
 
         results.append({
             "id": row_dict["id"],
@@ -197,7 +257,7 @@ def execute_search(
             "score": score
         })
 
-    # Eğer arama yapılmışsa skora göre sırala
+    # Arama yapılmışsa en yüksek puanlı (en alakalı) kararları en üste al
     if q_clean:
         results.sort(key=lambda x: x["score"], reverse=True)
 

@@ -34,6 +34,11 @@ def init_db():
     );
     """)
 
+    # Tekillik İndeksi (Aynı Daire, Esas No ve Karar No'ya sahip mükerrer kayıtları engeller)
+    cursor.execute("""
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_unique ON decisions(daire, esas_no, karar_no);
+    """)
+
     # FTS5 Sanal Tablosu (Full-Text Search)
     cursor.execute("""
     CREATE VIRTUAL TABLE IF NOT EXISTS decisions_fts USING fts5(
@@ -76,9 +81,25 @@ def init_db():
     conn.commit()
     conn.close()
 
-def insert_decision(decision_data: Dict[str, Any]) -> int:
+def insert_decision(decision_data: Dict[str, Any], return_is_new: bool = False):
     conn = get_connection()
     cursor = conn.cursor()
+
+    daire = str(decision_data.get("daire", "")).strip()
+    esas_no = str(decision_data.get("esas_no", "")).strip()
+    karar_no = str(decision_data.get("karar_no", "")).strip()
+
+    # 1. Mükerrer Karar Kontrolü (Daire, Esas No ve Karar No aynıysa tekrar ekleme)
+    if daire and esas_no and karar_no:
+        cursor.execute(
+            "SELECT id FROM decisions WHERE daire = ? AND esas_no = ? AND karar_no = ?",
+            (daire, esas_no, karar_no)
+        )
+        existing = cursor.fetchone()
+        if existing:
+            conn.close()
+            existing_id = existing["id"]
+            return (existing_id, False) if return_is_new else existing_id
 
     kanunlar = decision_data.get("ilgili_kanunlar", [])
     if isinstance(kanunlar, list):
@@ -93,9 +114,9 @@ def insert_decision(decision_data: Dict[str, Any]) -> int:
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         decision_data["mahkeme"],
-        decision_data["daire"],
-        decision_data["esas_no"],
-        decision_data["karar_no"],
+        daire,
+        esas_no,
+        karar_no,
         decision_data["karar_tarihi"],
         decision_data["hukuk_alani"],
         decision_data["karar_sonucu"],
@@ -108,7 +129,21 @@ def insert_decision(decision_data: Dict[str, Any]) -> int:
     inserted_id = cursor.lastrowid
     conn.commit()
     conn.close()
-    return inserted_id
+    return (inserted_id, True) if return_is_new else inserted_id
+
+def decision_exists(daire: str, esas_no: str, karar_no: str) -> bool:
+    """Belirtilen daire, esas ve karar numarasına sahip kararın veritabanında olup olmadığını kontrol eder."""
+    if not (daire and esas_no and karar_no):
+        return False
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT 1 FROM decisions WHERE daire = ? AND esas_no = ? AND karar_no = ? LIMIT 1",
+        (daire.strip(), esas_no.strip(), karar_no.strip())
+    )
+    exists = cursor.fetchone() is not None
+    conn.close()
+    return exists
 
 def get_decision_by_id(decision_id: int) -> Optional[Dict[str, Any]]:
     conn = get_connection()

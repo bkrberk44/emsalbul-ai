@@ -201,6 +201,29 @@
                     <input type="number" id="filter-yil-bitis" placeholder="Örn: 2026" min="1990" max="2026" onchange="triggerSearch()" class="filter-input">
                 </div>
             </div>
+        <!-- UYAP Canlı Havuz Bilgilendirme Rozeti / Kartı -->
+        <div id="uyap-pool-banner" class="hidden mb-5 p-4 rounded-2xl bg-gradient-to-r from-red-50 via-rose-50 to-amber-50 border border-rose-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center font-bold shadow-md shadow-red-900/10 flex-shrink-0">
+                    <i data-lucide="landmark" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-red-900 uppercase tracking-wide">T.C. Adalet Bakanlığı UYAP Portalı</span>
+                        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span class="text-[10px] bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded-full border border-red-200">Canlı Sistem</span>
+                    </div>
+                    <p class="text-xs text-slate-700 mt-0.5">
+                        "<strong id="uyap-banner-query" class="text-slate-900"></strong>" hakkında resmi UYAP sisteminde toplam 
+                        <strong id="uyap-banner-total" class="text-red-700 font-extrabold text-sm">0</strong> adet emsal karar tespit edildi!
+                        <span class="text-slate-500 block sm:inline sm:ml-1">En güncel kararlar tam metinleriyle indirilip yapay zekâ analizine hazırlandı.</span>
+                    </p>
+                </div>
+            </div>
+            <button onclick="loadMoreUyapDecisions()" id="uyap-more-btn" class="flex items-center gap-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-700 active:bg-red-800 px-4 py-2.5 rounded-xl transition shadow-sm whitespace-nowrap self-end sm:self-auto shadow-rose-900/10">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                <span>Daha Fazla Karar Çek (+10)</span>
+            </button>
         </div>
 
         <!-- Arama Durumu & Sonuç Başlığı -->

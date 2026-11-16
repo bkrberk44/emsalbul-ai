@@ -115,33 +115,40 @@ client_requests = defaultdict(float)
 async def api_live_uyap_search(
     request: Request,
     q: str = Query(..., description="UYAP'tan canlı aranacak konu/kelime"),
-    limit: int = Query(5, ge=1, le=15, description="Çekilecek karar sayısı")
+    limit: int = Query(10, ge=1, le=20, description="Çekilecek karar sayısı"),
+    page: int = Query(1, ge=1, description="UYAP sayfa numarası")
 ):
     """
     Adalet Bakanlığı UYAP Emsal Karar sisteminden canlı olarak gerçek kararları çeker,
     veritabanına ve tam metin FTS5 dizinine kaydeder ve sonuçları döndürür.
-    UYAP IP engeli yememek için istemci başına 3 saniyelik bekleme koruması uygulanır.
+    UYAP IP engeli yememek için istemci başına 2 saniyelik bekleme koruması uygulanır.
     """
     client_ip = request.client.host if request.client else "unknown"
     now = time.time()
     last_req_time = client_requests[client_ip]
 
-    if now - last_req_time < 3.0:
+    if now - last_req_time < 2.0:
         raise HTTPException(
             status_code=429,
-            detail="UYAP sunucularını korumak için lütfen yeni canlı sorgulama yapmadan önce 3 saniye bekleyiniz."
+            detail="UYAP sunucularını korumak için lütfen yeni canlı sorgulama yapmadan önce 2 saniye bekleyiniz."
         )
     client_requests[client_ip] = now
 
     from .live_scraper import UyapClient
-    live_decisions = UyapClient.fetch_live_decisions(query=q, limit=limit)
+    result = UyapClient.fetch_live_decisions(query=q, limit=limit, page_number=page)
+    live_decisions = result.get("decisions", [])
+    total_in_uyap = result.get("total_in_uyap", 0)
 
     saved_count = 0
+    already_saved_count = 0
     saved_ids = []
     for d in live_decisions:
         try:
-            inserted_id = insert_decision(d)
-            saved_count += 1
+            inserted_id, is_new = insert_decision(d, return_is_new=True)
+            if is_new:
+                saved_count += 1
+            else:
+                already_saved_count += 1
             saved_ids.append(inserted_id)
         except Exception as e:
             print(f"[Live Ingest] Kayıt hatası: {e}")
@@ -149,8 +156,11 @@ async def api_live_uyap_search(
     return {
         "status": "success",
         "query": q,
+        "total_in_uyap": total_in_uyap,
+        "page": page,
         "retrieved_count": len(live_decisions),
         "saved_to_db": saved_count,
+        "already_saved": already_saved_count,
         "decisions": live_decisions
     }
 
