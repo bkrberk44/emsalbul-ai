@@ -194,10 +194,21 @@ def execute_search(
     rows = cursor.fetchall()
 
     results = []
+    seen_content_fps = set()
     highlight_terms = list(set(raw_keywords + expanded_terms))
 
     for r in rows:
         row_dict = dict(r)
+
+        # İçerik Parmak İzi (Aynı mahkemenin birebir aynı gerekçeli seri kararlarını tekilleştir)
+        clean_core = re.sub(r'(DOSYA|ESAS|KARAR|NO|T\.C\.|TÜRK MİLLETİ ADINA|\d+[\./]\d+[\./]\d+|\d+)', '', row_dict["tam_metin"][:600], flags=re.IGNORECASE)
+        clean_core = re.sub(r'\s+', ' ', clean_core).strip().lower()
+        content_fp = f"{row_dict['daire']}_{clean_core[:120]}"
+
+        if content_fp in seen_content_fps:
+            continue  # Birebir aynı gerekçeli seri kararı listeye tekrar ekleme
+        seen_content_fps.add(content_fp)
+
         try:
             kanunlar = json.loads(row_dict["ilgili_kanunlar"])
         except Exception:

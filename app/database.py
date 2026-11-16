@@ -34,10 +34,28 @@ def init_db():
     );
     """)
 
+    # Varsa eski mükerrer kayıtları temizle (her benzersiz daire-esas-karar için sadece birini tut)
+    try:
+        cursor.execute("""
+        DELETE FROM decisions
+        WHERE id NOT IN (
+            SELECT MIN(id)
+            FROM decisions
+            GROUP BY daire, esas_no, karar_no
+        );
+        """)
+        conn.commit()
+    except Exception:
+        pass
+
     # Tekillik İndeksi (Aynı Daire, Esas No ve Karar No'ya sahip mükerrer kayıtları engeller)
-    cursor.execute("""
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_unique ON decisions(daire, esas_no, karar_no);
-    """)
+    try:
+        cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_unique ON decisions(daire, esas_no, karar_no);
+        """)
+        conn.commit()
+    except Exception:
+        pass
 
     # FTS5 Sanal Tablosu (Full-Text Search)
     cursor.execute("""

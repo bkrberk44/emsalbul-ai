@@ -75,6 +75,7 @@ class UyapClient:
 
         query_optimized = cls.normalize_query(query)
         decisions = []
+        seen_fingerprints = set()
         total_in_uyap = 0
 
         try:
@@ -135,7 +136,14 @@ class UyapClient:
                     existing_row = c.fetchone()
                     conn.close()
                     if existing_row:
-                        decisions.append(dict(existing_row))
+                        row_data = dict(existing_row)
+                        clean_core = re.sub(r'(DOSYA|ESAS|KARAR|NO|T\.C\.|TÜRK MİLLETİ ADINA|\d+[\./]\d+[\./]\d+|\d+)', '', row_data["tam_metin"][:600], flags=re.IGNORECASE)
+                        clean_core = re.sub(r'\s+', ' ', clean_core).strip().lower()
+                        content_fp = f"{daire}_{clean_core[:120]}"
+                        if content_fp in seen_fingerprints:
+                            continue
+                        seen_fingerprints.add(content_fp)
+                        decisions.append(row_data)
                         continue
 
                 # 5. Yeni kararın tam metnini UYAP'tan çek (Rate limit korumalı)
@@ -207,6 +215,15 @@ class UyapClient:
                 # İlgili kanun maddelerini ayıkla
                 kanun_matches = re.findall(r'(\b\d+\s+sayılı[^\n\.\,]+m\.\s*\d+)', tam_metin, re.IGNORECASE)
                 kanunlar = list(set([k.strip() for k in kanun_matches[:3]]))
+
+                # Seri Karar / Aynı Gerekçe Kontrolü (Aynı mahkemenin birebir aynı metinli kararlarını tekilleştir)
+                clean_core = re.sub(r'(DOSYA|ESAS|KARAR|NO|T\.C\.|TÜRK MİLLETİ ADINA|\d+[\./]\d+[\./]\d+|\d+)', '', tam_metin[:600], flags=re.IGNORECASE)
+                clean_core = re.sub(r'\s+', ' ', clean_core).strip().lower()
+                content_fp = f"{daire}_{clean_core[:120]}"
+
+                if content_fp in seen_fingerprints:
+                    continue  # Birebir aynı metne sahip seri kararı atla
+                seen_fingerprints.add(content_fp)
 
                 decisions.append({
                     "mahkeme": mahkeme,
