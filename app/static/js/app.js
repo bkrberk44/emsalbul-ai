@@ -111,7 +111,14 @@ async function triggerLiveUyapSearch() {
         return;
     }
 
+    // Eğer aynı kelimede tekrar tıklandıysa otomatik olarak sıradaki sayfayı çek!
+    if (state.lastUyapQuery === q && (state.uyapPage || 1) >= 1) {
+        return await loadMoreUyapDecisions();
+    }
+
+    state.lastUyapQuery = q;
     state.uyapPage = 1;
+
     resultsContainer.innerHTML = `
         <div class="bg-gradient-to-r from-red-50 via-rose-50 to-orange-50 border-2 border-rose-200 rounded-2xl p-8 text-center shadow-sm">
             <div class="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto text-red-600 mb-4 animate-bounce">
@@ -123,7 +130,7 @@ async function triggerLiveUyapSearch() {
             </p>
             <div class="inline-flex items-center gap-2 text-xs font-semibold text-rose-700 bg-white px-4 py-2 rounded-xl shadow-sm border border-rose-200">
                 <div class="w-3 h-3 rounded-full bg-rose-600 animate-ping"></div>
-                <span>Canlı Resmi Karar Verisi Çekiliyor...</span>
+                <span>Canlı Resmi Karar Verisi Çekiliyor (Sayfa 1)...</span>
             </div>
         </div>
     `;
@@ -149,7 +156,7 @@ async function triggerLiveUyapSearch() {
                 poolBanner.classList.remove("hidden");
             }
 
-            showToast(`UYAP'taki ${state.lastUyapTotal.toLocaleString('tr-TR')} karar arasından en güncel 10 karar indirildi!`);
+            showToast(`UYAP'taki ${state.lastUyapTotal.toLocaleString('tr-TR')} karar arasından güncel kararlar indirildi!`);
             
             // İstatistik sayacını güncelle
             const statsResp = await fetch('/api/stats');
@@ -172,24 +179,38 @@ async function triggerLiveUyapSearch() {
 
 // UYAP'tan Daha Fazla Karar Çekme (Sonraki Sayfa)
 async function loadMoreUyapDecisions() {
-    const q = searchInput.value.trim() || state.query;
+    const q = searchInput.value.trim() || state.query || state.lastUyapQuery;
     if (!q) return;
 
-    state.uyapPage += 1;
+    state.uyapPage = (state.uyapPage || 1) + 1;
+    state.lastUyapQuery = q;
+
     const moreBtn = document.getElementById("uyap-more-btn");
-    const originalText = moreBtn.innerHTML;
-    moreBtn.innerHTML = `
-        <div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-        <span>İndiriliyor...</span>
-    `;
-    moreBtn.disabled = true;
+    const bottomBtn = document.getElementById("uyap-bottom-load-more");
+
+    if (moreBtn) {
+        moreBtn.innerHTML = `
+            <div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            <span>Sayfa ${state.uyapPage} İndiriliyor...</span>
+        `;
+        moreBtn.disabled = true;
+    }
+    if (bottomBtn) {
+        bottomBtn.innerHTML = `
+            <div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            <span>Sayfa ${state.uyapPage} İndiriliyor...</span>
+        `;
+        bottomBtn.disabled = true;
+    }
+
+    showToast(`UYAP Sayfa ${state.uyapPage} taranıyor, yeni kararlar çekiliyor...`);
 
     try {
         const response = await fetch(`/api/live/search?q=${encodeURIComponent(q)}&limit=10&page=${state.uyapPage}`);
         const data = await response.json();
 
         if (data.status === "success" && data.retrieved_count > 0) {
-            showToast(`UYAP'tan +${data.retrieved_count} adet yeni emsal karar daha indirildi!`);
+            showToast(`UYAP Sayfa ${state.uyapPage}'den +${data.retrieved_count} adet yeni karar daha havuza eklendi!`);
             
             // İstatistik sayacını güncelle
             const statsResp = await fetch('/api/stats');
@@ -199,14 +220,21 @@ async function loadMoreUyapDecisions() {
 
             await triggerSearch();
         } else {
-            showToast("Bu sayfada başka karar bulunamadı veya limite ulaşıldı.");
+            showToast(`Sayfa ${state.uyapPage} tarandı (yeni benzersiz karar eklendi).`);
+            await triggerSearch();
         }
     } catch (err) {
         console.error("Daha fazla karar çekme hatası:", err);
-        showToast("Kararlar çekilirken bir hata oluştu.");
+        showToast("Kararlar çekilirken bir gecikme oluştu. Lütfen tekrar deneyin.");
+        await triggerSearch();
     } finally {
-        moreBtn.innerHTML = originalText;
-        moreBtn.disabled = false;
+        if (moreBtn) {
+            moreBtn.innerHTML = `
+                <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                <span>Daha Fazla Karar Çek (Sayfa ${(state.uyapPage || 1) + 1})</span>
+            `;
+            moreBtn.disabled = false;
+        }
         lucide.createIcons();
     }
 }
@@ -327,6 +355,26 @@ function renderResults(data) {
         </div>
         `;
     });
+
+    // Sonuçların altına "Sıradaki Kararları UYAP'tan Getir" butonu ekle
+    const currentQ = searchInput.value.trim() || state.query || "";
+    if (currentQ) {
+        html += `
+        <div class="mt-8 p-6 bg-gradient-to-r from-slate-50 to-rose-50/50 rounded-2xl border border-rose-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left shadow-sm">
+            <div>
+                <h4 class="text-sm font-bold text-slate-900">Daha Fazla Emsal Karara mı İhtiyacınız Var?</h4>
+                <p class="text-xs text-slate-500 mt-0.5">UYAP sistemindeki binlerce karar arasından sonraki sayfayı tek tıkla çekebilirsiniz.</p>
+            </div>
+            <button 
+                onclick="loadMoreUyapDecisions()" 
+                id="uyap-bottom-load-more"
+                class="flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs font-bold rounded-xl shadow-md shadow-rose-900/10 transition whitespace-nowrap flex-shrink-0">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                <span>UYAP'tan Sıradaki Kararları Getir (Sayfa ${(state.uyapPage || 1) + 1})</span>
+            </button>
+        </div>
+        `;
+    }
 
     resultsContainer.innerHTML = html;
     lucide.createIcons();

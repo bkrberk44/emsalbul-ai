@@ -100,10 +100,13 @@ class UyapClient:
             }
             resp = session.post(f"{cls.BASE_URL}/aramalist", json=payload, headers=headers, timeout=20)
             
-            # Rate limit (429) durumunda bir kez 1.5 sn bekleyip tekrar dene
+            # Rate limit (429) durumunda otomatik bekle ve tekrar dene
             if resp.status_code == 429:
-                time.sleep(1.5)
+                time.sleep(2.0)
                 resp = session.post(f"{cls.BASE_URL}/aramalist", json=payload, headers=headers, timeout=20)
+                if resp.status_code == 429:
+                    time.sleep(2.5)
+                    resp = session.post(f"{cls.BASE_URL}/aramalist", json=payload, headers=headers, timeout=20)
 
             if resp.status_code != 200:
                 print(f"[UYAP] Hata kodu: {resp.status_code}")

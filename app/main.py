@@ -127,10 +127,10 @@ async def api_live_uyap_search(
     now = time.time()
     last_req_time = client_requests[client_ip]
 
-    if now - last_req_time < 2.0:
+    if now - last_req_time < 0.8:
         raise HTTPException(
             status_code=429,
-            detail="UYAP sunucularını korumak için lütfen yeni canlı sorgulama yapmadan önce 2 saniye bekleyiniz."
+            detail="UYAP sunucularını korumak için lütfen yeni canlı sorgulama yapmadan önce 1 saniye bekleyiniz."
         )
     client_requests[client_ip] = now
 
