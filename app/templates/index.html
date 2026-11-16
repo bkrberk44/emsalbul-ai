@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EmsalBul.AI - Türkiye Emsal Karar Arama ve AI Analiz Motoru</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Merriweather', 'serif'],
+                    },
+                    colors: {
+                        navy: {
+                            800: '#1e293b',
+                            900: '#0f172a',
+                            950: '#020617',
+                        },
+                        gold: {
+                            500: '#d97706',
+                            600: '#b45309',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col font-sans">
+
+    <!-- Üst Bar / Navigation -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-700 to-indigo-900 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+                    <i data-lucide="scale" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl font-bold tracking-tight text-slate-900">EmsalBul<span class="text-blue-600">.AI</span></span>
+                        <span class="text-[10px] font-semibold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full">Pro</span>
+                    </div>
+                    <p class="text-xs text-slate-500 hidden sm:block">Türkiye Mahkemeleri Emsal Karar Arama ve AI Analiz Platformu</p>
+                </div>
+            </div>
+
+            <!-- Portal Durumu & Hızlı İstatistik -->
+            <div class="flex items-center gap-4">
+                <div class="hidden md:flex items-center gap-2 text-xs bg-slate-100 py-1.5 px-3 rounded-lg border border-slate-200">
+                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span class="text-slate-600 font-medium">Sistem: <span id="db-total-count" class="text-slate-900 font-bold">{{ stats.total_karar }}</span> Emsal Karar Yayında</span>
+                </div>
+                <button onclick="openPortalBridgeModal()" class="flex items-center gap-1.5 text-xs font-medium text-slate-700 hover:text-blue-600 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors">
+                    <i data-lucide="globe" class="w-3.5 h-3.5 text-blue-600"></i>
+                    <span>Resmi Portallar</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Ana Arama Hero Alanı -->
+    <section class="bg-gradient-to-b from-white via-slate-50 to-slate-100 border-b border-slate-200 pt-10 pb-8 px-4 sm:px-6">
+        <div class="max-w-4xl mx-auto text-center">
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight mb-3">
+                İstediğiniz Emsal Kararı <span class="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Tek Tıkla Bulun</span>
+            </h1>
+            <p class="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto mb-6">
+                Yargıtay, Danıştay ve Anayasa Mahkemesi kararlarında akıllı tam metin arama yapın, 
+                yapay zekâ ile karar özetlerini ve hukuki gerekçeleri anında çıkarın.
+            </p>
+
+            <!-- Arama Çubuğu -->
+            <div class="relative max-w-3xl mx-auto">
+                <div class="flex items-center shadow-lg shadow-blue-900/5 rounded-2xl bg-white border-2 border-slate-200 focus-within:border-blue-600 focus-within:ring-4 focus-within:ring-blue-100 transition-all p-1.5 sm:p-2 gap-1 sm:gap-2">
+                    <div class="pl-2.5 sm:pl-3 text-slate-400 flex-shrink-0">
+                        <i data-lucide="search" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                    </div>
+                    <input 
+                        type="text" 
+                        id="search-input" 
+                        placeholder="Kelime, kanun maddesi veya konu yazın (örn: TBK 344, işe iade, tahliye)..." 
+                        class="flex-1 min-w-0 py-2 sm:py-2.5 px-2 text-slate-900 placeholder-slate-400 focus:outline-none text-sm sm:text-base bg-transparent font-medium"
+                        autocomplete="off"
+                    >
+                    <button 
+                        id="clear-btn" 
+                        onclick="clearSearch()" 
+                        class="hidden p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition flex-shrink-0"
+                        title="Temizle">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                    
+                    <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                        <button 
+                            id="search-btn" 
+                            onclick="triggerSearch()" 
+                            class="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold px-4 sm:px-5 py-2.5 rounded-xl flex items-center gap-1.5 text-xs sm:text-sm shadow-sm transition-all whitespace-nowrap"
+                            title="Veritabanında Hızlı Ara">
+                            <span>Ara</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                        <button 
+                            id="live-uyap-btn" 
+                            onclick="triggerLiveUyapSearch()" 
+                            class="bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 active:from-red-800 active:to-rose-900 text-white font-semibold px-3 sm:px-4 py-2.5 rounded-xl flex items-center gap-1.5 text-xs sm:text-sm shadow-sm transition-all whitespace-nowrap shadow-rose-900/10"
+                            title="T.C. Adalet Bakanlığı UYAP Emsal Karar sistemine canlı istek atarak gerçek kararları çek">
+                            <i data-lucide="radio" class="w-4 h-4 text-rose-200 animate-pulse"></i>
+                            <span class="hidden md:inline">Canlı UYAP'tan Çek</span>
+                            <span class="md:hidden">UYAP</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Popüler / Örnek Arama Etiketleri -->
+                <div class="flex flex-wrap items-center justify-center gap-2 mt-4 text-xs">
+                    <span class="text-slate-500 font-medium">Hızlı Aramalar:</span>
+                    <button onclick="setQuery('işe iade performans')" class="quick-tag">İşe İade & Performans</button>
+                    <button onclick="setQuery('ihtiyaç sebebiyle tahliye TBK 350')" class="quick-tag">Kira İhtiyaç Tahliye</button>
+                    <button onclick="setQuery('kira tespit hakkaniyet')" class="quick-tag">Kira Tespit & Hakkaniyet</button>
+                    <button onclick="setQuery('meşru müdafaa TCK 27')" class="quick-tag">Meşru Müdafaa Sınırı</button>
+                    <button onclick="setQuery('tahliye taahhütnamesi boş imza')" class="quick-tag">Tahliye Taahhüdü (Beyaza İmza)</button>
+                    <button onclick="setQuery('makul sürede yargılanma')" class="quick-tag">AYM Hak İhlali</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Ana İçerik ve Filtreler -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+        
+        <!-- Filtre ve Mahkeme Sekmeleri -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 mb-6 shadow-sm">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                
+                <!-- Mahkeme Hızlı Sekmeleri -->
+                <div class="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0" id="court-tabs">
+                    <button onclick="setCourtFilter('Tümü')" class="court-tab active" data-court="Tümü">Tüm Mahkemeler</button>
+                    <button onclick="setCourtFilter('Yargıtay')" class="court-tab" data-court="Yargıtay">Yargıtay</button>
+                    <button onclick="setCourtFilter('Danıştay')" class="court-tab" data-court="Danıştay">Danıştay</button>
+                    <button onclick="setCourtFilter('Anayasa Mahkemesi')" class="court-tab" data-court="Anayasa Mahkemesi">Anayasa Mahkemesi</button>
+                </div>
+
+                <!-- Gelişmiş Filtre Toggle -->
+                <button onclick="toggleAdvancedFilters()" class="flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-blue-600 self-start md:self-auto py-1.5 px-3 rounded-lg hover:bg-slate-50 border border-slate-200 transition">
+                    <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5 text-slate-500"></i>
+                    <span>Filtreleri Detaylandır</span>
+                    <i data-lucide="chevron-down" id="filter-chevron" class="w-3.5 h-3.5 transition-transform"></i>
+                </button>
+            </div>
+
+            <!-- Gelişmiş Filtre Paneli (Açılır/Kapanır) -->
+            <div id="advanced-filters" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Hukuk Alanı</label>
+                    <select id="filter-alan" onchange="triggerSearch()" class="filter-select">
+                        <option value="Tümü">Tüm Hukuk Alanları</option>
+                        <option value="İş Hukuku">İş Hukuku</option>
+                        <option value="Kira Hukuku">Kira Hukuku</option>
+                        <option value="Ceza Hukuku">Ceza Hukuku</option>
+                        <option value="Tazminat Hukuku">Tazminat Hukuku</option>
+                        <option value="İcra ve İflas Hukuku">İcra ve İflas Hukuku</option>
+                        <option value="İdare ve İmar Hukuku">İdare ve İmar Hukuku</option>
+                        <option value="Anayasa ve İnsan Hakları">Anayasa ve İnsan Hakları</option>
+                        <option value="Aile Hukuku">Aile Hukuku</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Karar Sonucu</label>
+                    <select id="filter-sonuc" onchange="triggerSearch()" class="filter-select">
+                        <option value="Tümü">Tümü (Onama / Bozma...)</option>
+                        <option value="Bozma">Bozma</option>
+                        <option value="Onama">Onama</option>
+                        <option value="Düzelterek Onama">Düzelterek Onama</option>
+                        <option value="İptal / Bozma">İptal / Bozma</option>
+                        <option value="Hak İhlali">Hak İhlali</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Başlangıç Yılı</label>
+                    <input type="number" id="filter-yil-baslangic" placeholder="Örn: 2020" min="1990" max="2026" onchange="triggerSearch()" class="filter-input">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Bitiş Yılı</label>
+                    <input type="number" id="filter-yil-bitis" placeholder="Örn: 2026" min="1990" max="2026" onchange="triggerSearch()" class="filter-input">
+                </div>
+            </div>
+        </div>
+
+        <!-- Arama Durumu & Sonuç Başlığı -->
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+                <h2 class="text-lg font-bold text-slate-900">Bulunan Emsal Kararlar</h2>
+                <span id="results-count-badge" class="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-0.5 rounded-full">Yükleniyor...</span>
+            </div>
+            <div class="text-xs text-slate-500" id="search-feedback"></div>
+        </div>
+
+        <!-- Karar Sonuç Listesi -->
+        <div id="results-container" class="space-y-4">
+            <!-- Yükleme İskeleti (Skeleton Loading) -->
+            <div class="animate-pulse space-y-4">
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 h-44"></div>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200 h-44"></div>
+            </div>
+        </div>
+
+        <!-- Boş Durum (Empty State) -->
+        <div id="empty-state" class="hidden text-center py-16 bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
+            <div class="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto text-rose-600 mb-4">
+                <i data-lucide="radio" class="w-8 h-8 animate-pulse"></i>
+            </div>
+            <h3 class="text-base font-bold text-slate-900 mb-1">Yerel Veritabanında Henüz Karar Yok</h3>
+            <p class="text-sm text-slate-500 max-w-md mx-auto mb-5">
+                Bu konu için doğrudan <strong>T.C. Adalet Bakanlığı UYAP Emsal Karar Portalı</strong>'na canlı istek atarak gerçek emsal kararları hemen getirebilirsiniz.
+            </p>
+            <div class="flex flex-wrap items-center justify-center gap-3">
+                <button onclick="triggerLiveUyapSearch()" class="flex items-center gap-2 text-sm font-bold text-white bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 px-5 py-2.5 rounded-xl transition shadow-md shadow-rose-900/10">
+                    <i data-lucide="cloud-download" class="w-4 h-4"></i>
+                    <span>UYAP'tan Canlı Kararları Çek ve Kaydet</span>
+                </button>
+                <button onclick="resetFiltersAndSearch()" class="text-sm font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-4 py-2.5 rounded-xl transition">
+                    Filtreleri Sıfırla
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- MODAL 1: Karar Tam Metni İnceleme Modalı -->
+    <div id="decision-modal" class="modal-overlay hidden">
+        <div class="modal-card max-w-4xl max-h-[90vh] flex flex-col">
+            <!-- Modal Başlık -->
+            <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
+                        <i data-lucide="scroll" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 id="modal-court-title" class="text-base font-bold text-slate-900 leading-tight">Yargıtay Kararı</h3>
+                        <p id="modal-sub-title" class="text-xs text-slate-500">Esas ve Karar Bilgileri</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="triggerAISummaryFromModal()" class="flex items-center gap-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-lg transition">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                        <span>AI Özeti</span>
+                    </button>
+                    <button onclick="copyCitationFromModal()" class="flex items-center gap-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 bg-white border border-slate-200 px-3 py-1.5 rounded-lg transition">
+                        <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                        <span>Atıf Kopyala</span>
+                    </button>
+                    <button onclick="closeDecisionModal()" class="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal Karar Bilgi Şeridi -->
+            <div class="px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div class="flex items-center gap-3">
+                    <span id="modal-alan-badge" class="font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded">Hukuk Alanı</span>
+                    <span id="modal-sonuc-badge" class="font-medium px-2 py-0.5 rounded">Sonuç</span>
+                    <span id="modal-tarih" class="text-slate-500 font-medium">Tarih: -</span>
+                </div>
+                <div id="modal-kanunlar-container" class="flex flex-wrap items-center gap-1"></div>
+            </div>
+
+            <!-- Modal İçerik Gövdesi -->
+            <div class="p-6 overflow-y-auto flex-1 font-serif text-slate-800 leading-relaxed text-sm whitespace-pre-wrap select-text bg-white" id="modal-content-body">
+                Yükleniyor...
+            </div>
+
+            <!-- Modal Alt Bilgi -->
+            <div class="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+                <span id="modal-citation-text" class="italic truncate max-w-md"></span>
+                <button onclick="window.print()" class="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition">
+                    <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+                    <span>Yazdır</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: Yapay Zekâ Analiz ve Özet Modalı -->
+    <div id="ai-modal" class="modal-overlay hidden">
+        <div class="modal-card max-w-3xl max-h-[90vh] flex flex-col">
+            <!-- AI Modal Başlık -->
+            <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-indigo-900 to-blue-900 text-white rounded-t-2xl">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                        <i data-lucide="sparkles" class="w-5 h-5 text-amber-300"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-base font-bold">Yapay Zekâ Karar Analitiği</h3>
+                            <span class="text-[10px] font-semibold bg-indigo-500/40 text-indigo-100 px-2 py-0.5 rounded-full border border-indigo-400/30">AI Hukuk</span>
+                        </div>
+                        <p id="ai-modal-subtitle" class="text-xs text-indigo-200">Karar Özeti ve Gerekçe Analizi</p>
+                    </div>
+                </div>
+                <button onclick="closeAIModal()" class="p-2 text-indigo-200 hover:text-white rounded-lg hover:bg-white/10 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- AI İçerik Kartları -->
+            <div class="p-6 overflow-y-auto space-y-4 bg-slate-50 flex-1" id="ai-modal-content">
+                
+                <!-- 1. Dava Konusu -->
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex items-center gap-2 text-xs font-bold uppercase text-slate-600 mb-2">
+                        <i data-lucide="file-text" class="w-4 h-4 text-blue-600"></i>
+                        <span>Davanın Konusu ve Olay</span>
+                    </div>
+                    <p id="ai-dava-konusu" class="text-sm text-slate-700 leading-relaxed"></p>
+                </div>
+
+                <!-- 2. Hukuki Uyuşmazlık -->
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex items-center gap-2 text-xs font-bold uppercase text-slate-600 mb-2">
+                        <i data-lucide="help-circle" class="w-4 h-4 text-amber-600"></i>
+                        <span>Temel Hukuki Uyuşmazlık</span>
+                    </div>
+                    <p id="ai-uyusmazlik" class="text-sm text-slate-700 leading-relaxed font-medium"></p>
+                </div>
+
+                <!-- 3. Önemli Hukuki İlkeler -->
+                <div class="bg-gradient-to-br from-amber-50 to-orange-50/50 p-4 rounded-xl border border-amber-200 shadow-sm">
+                    <div class="flex items-center gap-2 text-xs font-bold uppercase text-amber-800 mb-2.5">
+                        <i data-lucide="award" class="w-4 h-4 text-amber-600"></i>
+                        <span>Kararda Vurgulanan Hukuki İlkeler</span>
+                    </div>
+                    <ul id="ai-ilkeler-list" class="space-y-2 text-xs text-slate-800"></ul>
+                </div>
+
+                <!-- 4. Mahkemenin Temel Gerekçesi -->
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex items-center gap-2 text-xs font-bold uppercase text-slate-600 mb-2">
+                        <i data-lucide="scale" class="w-4 h-4 text-indigo-600"></i>
+                        <span>Yargı Merciinin Hukuki Gerekçesi</span>
+                    </div>
+                    <p id="ai-gerekce" class="text-sm text-slate-700 leading-relaxed"></p>
+                </div>
+
+                <!-- 5. Hüküm ve Karar Sonucu -->
+                <div class="bg-blue-50/60 p-4 rounded-xl border border-blue-200 shadow-sm">
+                    <div class="flex items-center gap-2 text-xs font-bold uppercase text-blue-900 mb-2">
+                        <i data-lucide="check-circle-2" class="w-4 h-4 text-blue-600"></i>
+                        <span>Nihai Hüküm ve Sonuç</span>
+                    </div>
+                    <p id="ai-hukum" class="text-sm font-semibold text-blue-950 leading-relaxed"></p>
+                </div>
+
+                <!-- 6. İlgili Mevzuat Maddeleri -->
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                    <div class="flex items-center gap-2 text-xs font-bold uppercase text-slate-600 mb-2">
+                        <i data-lucide="book-open" class="w-4 h-4 text-emerald-600"></i>
+                        <span>Dayanılan Kanun Maddeleri</span>
+                    </div>
+                    <div id="ai-kanunlar-tags" class="flex flex-wrap gap-1.5"></div>
+                </div>
+
+            </div>
+
+            <!-- AI Modal Alt Çubuk -->
+            <div class="p-4 border-t border-slate-200 bg-white flex items-center justify-between">
+                <span class="text-xs text-slate-500">Yapay Zekâ ile Karar Analizi Tamamlandı</span>
+                <button onclick="closeAIModal()" class="text-xs font-semibold bg-slate-900 text-white px-4 py-2 rounded-xl hover:bg-slate-800 transition">
+                    Kapat
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: Resmi Portallar Canlı Köprü Modalı -->
+    <div id="portal-modal" class="modal-overlay hidden">
+        <div class="modal-card max-w-md">
+            <div class="p-5 border-b border-slate-200 flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                        <i data-lucide="globe" class="w-4 h-4"></i>
+                    </div>
+                    <h3 class="text-base font-bold text-slate-900">Resmi Karar Portalları</h3>
+                </div>
+                <button onclick="closePortalBridgeModal()" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <div class="p-5 space-y-3">
+                <p class="text-xs text-slate-600">
+                    Mevcut arama ifadeniz (<strong id="portal-modal-query" class="text-slate-900"></strong>) için resmi devlet portallarına doğrudan sorgu gönderebilirsiniz:
+                </p>
+
+                <a id="link-yargitay" href="https://karararama.yargitay.gov.tr" target="_blank" class="portal-link-item">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-red-100 text-red-700 flex items-center justify-center font-bold text-xs">Y</div>
+                        <div>
+                            <div class="text-xs font-bold text-slate-900">Yargıtay Karar Arama</div>
+                            <div class="text-[11px] text-slate-500">karararama.yargitay.gov.tr</div>
+                        </div>
+                    </div>
+                    <i data-lucide="external-link" class="w-4 h-4 text-slate-400"></i>
+                </a>
+
+                <a id="link-uyap" href="https://emsal.uyap.gov.tr" target="_blank" class="portal-link-item">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs">U</div>
+                        <div>
+                            <div class="text-xs font-bold text-slate-900">UYAP Emsal Karar Portalı</div>
+                            <div class="text-[11px] text-slate-500">emsal.uyap.gov.tr</div>
+                        </div>
+                    </div>
+                    <i data-lucide="external-link" class="w-4 h-4 text-slate-400"></i>
+                </a>
+
+                <a id="link-danistay" href="https://karararama.danistay.gov.tr" target="_blank" class="portal-link-item">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">D</div>
+                        <div>
+                            <div class="text-xs font-bold text-slate-900">Danıştay Karar Arama</div>
+                            <div class="text-[11px] text-slate-500">karararama.danistay.gov.tr</div>
+                        </div>
+                    </div>
+                    <i data-lucide="external-link" class="w-4 h-4 text-slate-400"></i>
+                </a>
+
+                <a id="link-aym" href="https://kararlarbilgibankasi.anayasa.gov.tr" target="_blank" class="portal-link-item">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs">A</div>
+                        <div>
+                            <div class="text-xs font-bold text-slate-900">Anayasa Mahkemesi Bilgi Bankası</div>
+                            <div class="text-[11px] text-slate-500">kararlarbilgibankasi.anayasa.gov.tr</div>
+                        </div>
+                    </div>
+                    <i data-lucide="external-link" class="w-4 h-4 text-slate-400"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 4: Yasal Uyarı, KVKK ve Karar Kaldırma Talebi Modalı -->
+    <div id="legal-modal" class="modal-overlay hidden">
+        <div class="modal-card max-w-2xl max-h-[90vh] flex flex-col">
+            <!-- Modal Başlık -->
+            <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-sm">
+                        <i data-lucide="shield-check" class="w-5 h-5 text-amber-400"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-slate-900">Yasal Bilgilendirme ve KVKK</h3>
+                        <p class="text-xs text-slate-500">Hukuki Sorumluluk Reddi, Telif ve Veri Politikası</p>
+                    </div>
+                </div>
+                <button onclick="closeLegalModal()" class="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Modal Sekmeleri -->
+            <div class="flex border-b border-slate-200 px-6 bg-white gap-4 text-xs font-semibold">
+                <button onclick="switchLegalTab('disclaimer')" id="tab-btn-disclaimer" class="legal-tab py-3 border-b-2 border-blue-600 text-blue-600">Yasal Uyarı</button>
+                <button onclick="switchLegalTab('kvkk')" id="tab-btn-kvkk" class="legal-tab py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-900">KVKK & Telif</button>
+                <button onclick="switchLegalTab('takedown')" id="tab-btn-takedown" class="legal-tab py-3 border-b-2 border-transparent text-slate-500 hover:text-slate-900">Karar Kaldırma Talebi</button>
+            </div>
+
+            <!-- Modal Gövdesi -->
+            <div class="p-6 overflow-y-auto flex-1 space-y-4 text-xs leading-relaxed text-slate-700 bg-white" id="legal-modal-body">
+                
+                <!-- Sekme 1: Yasal Uyarı -->
+                <div id="legal-tab-disclaimer" class="space-y-3">
+                    <div class="p-3.5 bg-amber-50 rounded-xl border border-amber-200 flex items-start gap-2.5 text-amber-900">
+                        <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5"></i>
+                        <div>
+                            <strong class="font-bold">Hukuki Tavsiye Niteliği Taşımama Beyanı:</strong>
+                            <p class="mt-1">Bu sitede yayımlanan emsal mahkeme kararları, mevzuat bilgileri ve yapay zekâ destekli analizler yalnızca genel bilgilendirme ve akademik araştırma amacıyla sunulmaktadır.</p>
+                        </div>
+                    </div>
+                    <p>Sitemiz bir avukatlık bürosu veya hukuki danışmanlık kuruluşu değildir. Sitede yer alan analiz ve karar özetleri; avukat-müvekkil ilişkisi kurmaz, hukuki mütalaa teşkil etmez ve dava süreçlerinizde doğrudan hukuki dayanak yerine geçmez.</p>
+                    <p>Mahkeme kararlarının uygulanmasında her somut olayın kendine özgü koşulları belirleyicidir. Hak kaybına uğramamak adına hukuki uyuşmazlıklarınızda mutlaka bir <strong>avukata</strong> veya <strong>hukuk danışmanına</strong> başvurunuz.</p>
+                </div>
+
+                <!-- Sekme 2: KVKK ve Telif -->
+                <div id="legal-tab-kvkk" class="hidden space-y-3">
+                    <div class="p-3.5 bg-blue-50 rounded-xl border border-blue-200 text-blue-900">
+                        <strong class="font-bold">Telif Hakkı Koruması (FSEK m. 31):</strong>
+                        <p class="mt-1">5846 sayılı Fikir ve Sanat Eserleri Kanunu'nun 31. maddesi gereğince; resmi olarak yayımlanmış kanunlar, tüzükler, yönetmelikler ve <strong>yargı mercilerinin kararları</strong> telif hakkına tabi olmayıp kamuya açıktır.</p>
+                    </div>
+                    <h4 class="font-bold text-slate-900 text-sm">6698 Sayılı KVKK Uyarınca Anonimleştirme:</h4>
+                    <p>T.C. Anayasası'nın 141. maddesi uyarınca mahkemelerin duruşmaları ve kararları kural olarak alenidir. Ancak 6698 sayılı Kişisel Verilerin Korunması Kanunu (KVKK) gereğince özel hayatın gizliliğinin korunması amacıyla, yayınlanan kararlardaki taraflara ait kişisel veriler (ad, soyad, T.C. kimlik numarası, açık adres vb.) UYAP ve yargı mercileri tarafından çoğunlukla maskelenmektedir.</p>
+                    <p>Sehven açık bırakıldığı veya anonimleştirilmediği tespit edilen kişisel veriler, ilgilisinin başvurusu üzerine ivedilikle sistemden arındırılmakta veya yayından kaldırılmaktadır.</p>
+                </div>
+
+                <!-- Sekme 3: Karar Kaldırma Formu -->
+                <div id="legal-tab-takedown" class="hidden space-y-4">
+                    <p class="text-slate-600">
+                        Sitemizde yer alan bir kararda kişisel verilerinizin açıkça yer aldığını veya telif/hukuki gerekçelerle yayından kaldırılması gerektiğini düşünüyorsanız, aşağıdaki form aracılığıyla bildirimde bulunabilirsiniz. Bildirimler incelenerek <strong>en geç 48 saat</strong> içerisinde gereği yapılmaktadır.
+                    </p>
+
+                    <form id="takedown-form" onsubmit="handleTakedownSubmit(event)" class="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Adınız ve Soyadınız</label>
+                            <input type="text" id="td-name" required class="filter-input" placeholder="Ad Soyad">
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label class="block font-semibold text-slate-700 mb-1">E-Posta Adresiniz</label>
+                                <input type="email" id="td-email" required class="filter-input" placeholder="ornek@alanadi.com">
+                            </div>
+                            <div>
+                                <label class="block font-semibold text-slate-700 mb-1">Karar / Esas No (İlgili Karar)</label>
+                                <input type="text" id="td-karar" required class="filter-input" placeholder="Örn: 2023/1234">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Kaldırma / Düzeltme Talebinin Gerekçesi</label>
+                            <textarea id="td-reason" rows="3" required class="filter-input" placeholder="Lütfen kişisel verinizin geçtiği kısmı veya hukuki talebinizi açıklayınız..."></textarea>
+                        </div>
+                        <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-2 rounded-xl text-xs transition">
+                            Talebi İlet
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+
+            <!-- Modal Alt Bilgi -->
+            <div class="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+                <span>EmsalBul.AI Yasal Uyum ve Şeffaflık Politikası</span>
+                <button onclick="closeLegalModal()" class="text-xs font-semibold bg-white border border-slate-200 px-4 py-1.5 rounded-lg hover:bg-slate-100 transition">
+                    Kapat
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Kopyalandı Toast Bildirimi -->
+    <div id="toast" class="fixed bottom-6 right-6 bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg transform translate-y-16 opacity-0 transition-all duration-300 z-50 flex items-center gap-2">
+        <i data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toast-message">Atıf panoya kopyalandı!</span>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-8 text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-4 mb-4">
+                <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-blue-700 text-white flex items-center justify-center font-bold text-xs">
+                        <i data-lucide="scale" class="w-4 h-4"></i>
+                    </div>
+                    <span class="text-sm font-bold text-slate-900">EmsalBul<span class="text-blue-600">.AI</span></span>
+                    <span class="text-slate-400">|</span>
+                    <span>Türkiye Emsal Karar Arama ve AI Analiz Platformu</span>
+                </div>
+                
+                <!-- Yasal Bağlantılar -->
+                <div class="flex flex-wrap items-center justify-center gap-4 text-slate-600 font-medium">
+                    <button onclick="openLegalModal('disclaimer')" class="hover:text-blue-600 transition">Yasal Sorumluluk Reddi</button>
+                    <span class="text-slate-300">•</span>
+                    <button onclick="openLegalModal('kvkk')" class="hover:text-blue-600 transition">KVKK & Telif Politikası</button>
+                    <span class="text-slate-300">•</span>
+                    <button onclick="openLegalModal('takedown')" class="text-rose-600 hover:text-rose-700 font-semibold transition">Karar Kaldırma Talebi</button>
+                </div>
+            </div>
+
+            <div class="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2 text-slate-400 text-[11px]">
+                <p>© 2026 EmsalBul.AI • Tüm hakları saklıdır. Resmi kararlar FSEK m. 31 uyarınca kamu malıdır.</p>
+                <p class="text-center sm:text-right">Yargıtay, Danıştay, AYM ve Adalet Bakanlığı UYAP Emsal Karar Portalları ile Entegre</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Frontend Script -->
+    <script src="/static/js/app.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
+
