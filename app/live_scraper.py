@@ -118,7 +118,25 @@ class UyapClient:
                 return {"total_in_uyap": 0, "decisions": []}
 
             total_in_uyap = data_node.get("recordsTotal", 0)
-            raw_items = data_node.get("data", [])
+            raw_items = list(data_node.get("data", []))
+
+            # Kullanıcıya tek seferde zengin ve bol karar sunabilmek için aynı oturumda sonraki sayfayı da ekle
+            if total_in_uyap > 10:
+                try:
+                    time.sleep(0.3)
+                    p2_payload = {
+                        "data": {
+                            "arananKelime": query_optimized,
+                            "pageSize": 10,
+                            "pageNumber": page_number + 1
+                        }
+                    }
+                    resp2 = session.post(f"{cls.BASE_URL}/aramalist", json=p2_payload, headers=headers, timeout=15)
+                    if resp2.status_code == 200:
+                        p2_items = resp2.json().get("data", {}).get("data", [])
+                        raw_items.extend(p2_items)
+                except Exception as e:
+                    print(f"[UYAP] Sayfa genişletme uyarısı: {e}")
 
             for item in raw_items:
                 doc_id = item.get("id")

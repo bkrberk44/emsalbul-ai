@@ -182,7 +182,7 @@ async function loadMoreUyapDecisions() {
     const q = searchInput.value.trim() || state.query || state.lastUyapQuery;
     if (!q) return;
 
-    state.uyapPage = (state.uyapPage || 1) + 1;
+    state.uyapPage = (state.uyapPage || 1) + 2;
     state.lastUyapQuery = q;
 
     const moreBtn = document.getElementById("uyap-more-btn");
